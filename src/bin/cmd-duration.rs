@@ -1,4 +1,4 @@
-use cmd_duration_rs::Result;
+use cmd_duration_rs::{CmdDurationService, Result};
 use log::LevelFilter;
 use std::process::exit;
 use structopt::StructOpt;
@@ -29,5 +29,6 @@ fn main() {
 }
 
 fn run(opt: Opt) -> Result<()> {
+    let _service = CmdDurationService::new(opt.command, opt.args);
     Ok(())
 }
