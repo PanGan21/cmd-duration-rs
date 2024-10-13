@@ -29,6 +29,8 @@ fn main() {
 }
 
 fn run(opt: Opt) -> Result<()> {
-    let _service = CmdDurationService::new(opt.command, opt.args);
+    let mut service = CmdDurationService::new(opt.command, opt.args);
+    service.run();
+
     Ok(())
 }
