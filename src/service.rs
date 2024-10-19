@@ -11,6 +11,7 @@ use std::{
 };
 
 use crate::utils::{get_hours, get_minutes, get_seconds};
+use crate::{CmdDurationServiceError, Result};
 
 pub struct CmdDurationService {
     command: String,
@@ -24,7 +25,7 @@ impl CmdDurationService {
     }
 
     /// Starts the command in a separate thread and tracks its duration
-    pub fn run(&mut self) {
+    pub fn run(&mut self) -> Result<()> {
         let mut cmd = Command::new(&self.command);
         cmd.args(&self.args);
         cmd.stdout(Stdio::piped());
@@ -36,8 +37,13 @@ impl CmdDurationService {
         let running_clone = running.clone();
 
         let start_time = Instant::now();
-        let mut child = cmd.spawn().expect("Failed to execute command");
-        let mut child_output = child.stdout.take().expect("Failed to capture stdout");
+        let mut child = cmd
+            .spawn()
+            .map_err(CmdDurationServiceError::CommandExecutionError)?;
+        let mut child_output = child
+            .stdout
+            .take()
+            .ok_or(CmdDurationServiceError::StdoutCaptureError)?;
 
         thread::spawn(move || {
             let mut buffer = [0; 1024];
@@ -51,14 +57,17 @@ impl CmdDurationService {
             running_clone.store(false, Ordering::SeqCst);
         });
         // Start the duration printing
-        Self::log_duration_and_output(output, running, start_time);
+        Self::log_duration_and_output(output, running, start_time)?;
 
         // Wait for the command to finish
-        let _ = child.wait().expect("Failed to wait on child process");
+        let _ = child
+            .wait()
+            .map_err(CmdDurationServiceError::CommandExecutionError)?;
 
         // Ensure everything is printed before exiting
         thread::sleep(Duration::from_secs(1));
         print!("\n");
+        Ok(())
     }
 
     /// Continuously logs the duration and outputs any command results
@@ -66,7 +75,7 @@ impl CmdDurationService {
         output: Arc<Mutex<String>>,
         running: Arc<AtomicBool>,
         start: Instant,
-    ) {
+    ) -> Result<()> {
         let tick_duration = Duration::from_millis(250);
         let mut output_accumulator = String::new();
 
@@ -80,22 +89,28 @@ impl CmdDurationService {
                     .unwrap_or("");
                 output_accumulator = current_output.clone();
 
-                Self::clear_time();
+                Self::clear_time()?;
                 print!("\r{}", output_diff);
-                io::stdout().flush().unwrap();
+                io::stdout()
+                    .flush()
+                    .map_err(CmdDurationServiceError::CommandExecutionError)?;
             }
 
-            Self::log_duration(start);
+            Self::log_duration(start)?;
         }
+        Ok(())
     }
 
-    fn clear_time() {
+    fn clear_time() -> Result<()> {
         print!("\x1b[2K\r"); // Clear the last line
-        io::stdout().flush().unwrap();
+        io::stdout()
+            .flush()
+            .map_err(CmdDurationServiceError::CommandExecutionError)?;
+        Ok(())
     }
 
     /// Logs the current duration the command has been running for
-    fn log_duration(start: Instant) {
+    fn log_duration(start: Instant) -> Result<()> {
         let current_time = start.elapsed();
 
         let duration_message = format!(
@@ -105,16 +120,22 @@ impl CmdDurationService {
             get_seconds(current_time)
         );
 
-        let (cols, lines) = terminal::size().unwrap();
+        let (cols, lines) =
+            terminal::size().map_err(CmdDurationServiceError::CommandExecutionError)?;
 
         // Calculate the position to move the cursor to
         let message_length = duration_message.len() as u16;
         let position = cols.saturating_sub(message_length).saturating_sub(1); // Adjust to leave a space before the message
 
         // Move the cursor to the calculated position
-        execute!(io::stdout(), MoveTo(position, lines - 1)).unwrap();
+        execute!(io::stdout(), MoveTo(position, lines - 1))
+            .map_err(CmdDurationServiceError::CommandExecutionError)?;
 
         print!("{}", duration_message);
-        io::stdout().flush().unwrap();
+        io::stdout()
+            .flush()
+            .map_err(CmdDurationServiceError::CommandExecutionError)?;
+
+        Ok(())
     }
 }
