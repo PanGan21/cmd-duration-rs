@@ -1,5 +1,4 @@
 use cmd_duration_rs::{CmdDurationService, Result};
-use log::LevelFilter;
 use std::process::exit;
 use structopt::StructOpt;
 
@@ -18,8 +17,6 @@ struct Opt {
 }
 
 fn main() {
-    env_logger::builder().filter_level(LevelFilter::Info).init();
-
     let opt = Opt::from_args();
 
     if let Err(err) = run(opt) {
